@@ -185,41 +185,40 @@ jobs:
           SUSFS_SOURCE=https://gitlab.com/simonpunk/susfs4ksu.git
           SUSFS_BRANCH=kernel-${{ env.KERNEL_VERSION }}
           KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
+          PACK_METHOD=Anykernel3 # Anykernel3 need SOURCE and BRANCH,but MKBOOTIMG needn't it.
+          KERNELSU_METHOD=shell # shell and manual
 
-          # Set Anykernel3
-          git clone ${{ env.AK3_SOURCE }} -b ${{ env.AK3_BRANCH }} Anykernel3 --depth=1
-          
-          # Patch Cgroup V2
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/cgroupv2_to_49.patch
-          patch -p1 < cgroupv2_to_49.patch
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/binder_freezer_to_49.patch
-          patch -p1 < binder_freezer_to_49.patch
-
-          # Patch set_memory
-          cp /tmp/Patches/backport_set_memory.patch ./
-          patch -p1 < backport_set_memory.patch || true
-
-          # Patch LZ4KD
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/lz4kd_to_49.patch
-          patch -p1 < lz4kd_to_49.patch
-
-          # Patch Simple LMK
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/simple_lmk_to_49.patch
-          patch -p1 < simple_lmk_to_49.patch
-
-          # KPM Checker
-          if [[ -d "${{ env.KERNELSU_NAME }}/kernel/kpm" ]]; then
-            if [ -f "include/linux/set_memory.h" ] && [ "${{ env.KPM_ENABLE }}" == "true" ]; then
-                echo "CONFIG_KPM=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-                wget "${{ env.KPM_PATCH_SOURCE }}" -O patch
-                chmod a+x patch
-                echo "Set KPM successfully !"
-            elif [ "$KPM_ENABLE" == "true" ]; then
-                echo "Your kernel doesn't support KPM !"
+          # Set $PACK_METHOD and KernelSU
+          cd $GITHUB_WORKSPACE/device_kernel
+          if [[ $PACK_METHOD == "Anykernel3" ]]; then
+            if [[ -d "Anykernel3" ]]; then
+              echo "Found Anykernel3 in Kernel!"
             else
-                echo "Doesn't enable KPM !"
+              git clone ${{ env.AK3_SOURCE }} -b ${{ env.AK3_BRANCH }} Anykernel3 --depth=1
             fi
+          elif [[ $PACK_METHOD == "MKBOOTIMG" ]]; then
+            git clone https://android.googlesource.com/platform/system/tools/mkbootimg $GITHUB_WORKSPACE/mkboottools -b master-kernel-build-2022 --depth=1
+            wget ${{ env.BOOT_SOURCE }} -O $GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img
+          else
+            exit
           fi
+          echo "PACK_METHOD=$PACK_METHOD" >> $GITHUB_ENV
+
+          if [[ $KERNELSU_METHOD == "shell" ]]; then
+            curl -sSL ${{ env.KERNELSU_SOURCE }} | bash -s ${{ env.KERNELSU_BRANCH }}
+          elif [[ $KERNELSU_METHOD == "manual" ]]; then
+            rm -rf KernelSU && rm -rf KernelSU-Next
+            git clone ${{ env.KERNELSU_SOURCE }} -b ${{ env.KERNELSU_BRANCH }} ${{ env.KERNELSU_NAME }}
+            ln -sf "$(realpath --relative-to="$KERNEL_LOCATION/drivers" "$KERNEL_LOCATION/KernelSU-Next/kernel")" "kernelsu"
+            grep -q "kernelsu" "$KERNEL_LOCATION/drivers/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> $KERNEL_LOCATION/drivers/Makefile
+            grep -q "source \"drivers/kernelsu/Kconfig\"" "$KERNEL_LOCATION/drivers/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "$KERNEL_LOCATION/drivers/Kconfig"
+            echo "KernelSU Settings done."
+          else
+            exit
+          fi
+          echo "KERNELSU_METHOD=$KERNELSU_METHOD" >> $GITHUB_ENV
+          KSU_VERSION=$(cd ${{ env.KERNELSU_NAME }} && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
+          echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
 
           # Set SUSFS
           git clone $SUSFS_SOURCE -b $SUSFS_BRANCH susfs4ksu --depth=1
