@@ -179,60 +179,76 @@ jobs:
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           fi
 
-      - name: Set Anykernel3 and Others
-        run: |
-          # Variable
-          SUSFS_SOURCE=https://gitlab.com/simonpunk/susfs4ksu.git
-          SUSFS_BRANCH=kernel-${{ env.KERNEL_VERSION }}
-          KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
-
-          # Set Anykernel3 and KSU
-          cd $GITHUB_WORKSPACE
-          git clone ${{ env.AK3_SOURCE }} -b ${{ env.AK3_BRANCH }} Anykernel3 --depth=1
-
-          cd $GITHUB_WORKSPACE/device_kernel
-          curl -sSL ${{ env.KERNELSU_SOURCE }} | bash -s ${{ env.KERNELSU_BRANCH }}
-          KSU_VERSION=$(cd ${{ env.KERNELSU_NAME }} && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
-          echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
-          echo "PACK_METHOD=MKBOOTIMG" >> $GITHUB_ENV
-
-          # Patch Cgroup V2
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/cgroupv2_to_49.patch
-          patch -p1 < cgroupv2_to_49.patch
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/binder_freezer_to_49.patch
-          patch -p1 < binder_freezer_to_49.patch
-
-          # Patch set_memory
-          cp /tmp/Patches/backport_set_memory.patch ./
-          patch -p1 < backport_set_memory.patch || true
-
-          # Patch LZ4KD
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/lz4kd_to_49.patch
-          patch -p1 < lz4kd_to_49.patch
-
-          # Patch Simple LMK
-          wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/simple_lmk_to_49.patch
-          patch -p1 < simple_lmk_to_49.patch
-
-          # KPM Checker
-          if [[ -d "${{ env.KERNELSU_NAME }}/kernel/kpm" ]]; then
-            if [ -f "include/linux/set_memory.h" ] && [ "${{ env.KPM_ENABLE }}" == "true" ]; then
-                echo "CONFIG_KPM=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-                wget "${{ env.KPM_PATCH_SOURCE }}" -O patch
-                chmod a+x patch
-                echo "Set KPM successfully !"
-            elif [ "$KPM_ENABLE" == "true" ]; then
-                echo "Your kernel doesn't support KPM !"
-            else
-                echo "Doesn't enable KPM !"
-            fi
-          fi
-
-          # Set SUSFS
-          git clone $SUSFS_SOURCE -b $SUSFS_BRANCH susfs4ksu --depth=1
-          git clone https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git -b mi_kernel NonGKI_Kernel_Patches --depth=1
-          cp susfs4ksu/kernel_patches/fs/* fs/
-          cp susfs4ksu/kernel_patches/include/linux/* include/linux/
+          - name: Set Anykernel3 and Others
+    run: |
+     set -e
+     SUSFS_SOURCE="https://gitlab.com/simonpunk/susfs4ksu.git"
+     SUSFS_BRANCH="kernel-${{ env.KERNEL_VERSION }}"
+     KERNEL_PATCHES="https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git"
+    
+     cd $GITHUB_WORKSPACE
+     git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" Anykernel3 --depth=1 --verbose
+    
+     cd $GITHUB_WORKSPACE/device_kernel
+     curl -sSL "${{ env.KERNELSU_SOURCE }}" | bash -s "${{ env.KERNELSU_BRANCH }}"
+     KSU_VERSION=$(cd "${{ env.KERNELSU_NAME }}" && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
+     echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
+     echo "PACK_METHOD=MKBOOTIMG" >> $GITHUB_ENV
+    
+     function safe_patch() {
+        wget "$1" -O temp_patch.patch
+        if patch -p1 --dry-run < temp_patch.patch; then
+            patch -p1 < temp_patch.patch
+        fi
+        rm temp_patch.patch
+    }
+    
+    safe_patch "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/cgroupv2_to_49.patch"
+    safe_patch "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/binder_freezer_to_49.patch"
+    safe_patch "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/lz4kd_to_49.patch"
+    safe_patch "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/simple_lmk_to_49.patch"
+    
+    if [[ -f "/tmp/Patches/backport_set_memory.patch" ]]; then
+        cp /tmp/Patches/backport_set_memory.patch ./
+        patch -p1 < backport_set_memory.patch || true
+    fi
+    
+    if [[ -d "${{ env.KERNELSU_NAME }}/kernel/kpm" ]]; then
+        if [[ -f "include/linux/set_memory.h" && "${{ env.KPM_ENABLE }}" == "true" ]]; then
+            echo "CONFIG_KPM=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+            wget "${{ env.KPM_PATCH_SOURCE }}" -O kpm_patch
+            chmod a+x kpm_patch
+            ./kpm_patch || true
+        fi
+    fi
+    
+    function safe_git_clone() {
+        local url=$1
+        local branch=$2
+        local dir=$3
+        local retries=3
+        local count=0
+        
+        while [ $count -lt $retries ]; do
+            git clone "$url" -b "$branch" "$dir" --depth=1 --verbose && return 0
+            sleep 5
+            ((count++))
+        done
+        exit 1
+    }
+    
+    safe_git_clone "$SUSFS_SOURCE" "$SUSFS_BRANCH" "susfs4ksu"
+    safe_git_clone "$KERNEL_PATCHES" "mi_kernel" "NonGKI_Kernel_Patches"
+    
+    if [[ -d "susfs4ksu/kernel_patches/fs" ]]; then
+        mkdir -p fs
+        cp susfs4ksu/kernel_patches/fs/* fs/ || true
+    fi
+    
+    if [[ -d "susfs4ksu/kernel_patches/include/linux" ]]; then
+        mkdir -p include/linux
+        cp susfs4ksu/kernel_patches/include/linux/* include/linux/ || true
+    fi
 
       - name: Patch Kernel for no-kprobe
         run: |
