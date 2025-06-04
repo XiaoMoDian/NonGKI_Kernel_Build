@@ -1,19 +1,22 @@
-name: Build Kernel Xiaomi Mix2s (PEOS-A11-Official) with KSU and SUSFS
-
+name: Build Kernel Xiaomi Mix2s (EVOX-A15-Official) with KSU and SUSFS
 on:
   workflow_call:
   workflow_dispatch:
-
 env:
-  HOOK_METHOD: "normal"
-  KPM_ENABLE: "true"
-  KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
-  GENERATE_CHIP: "qcom"
-  REKERNEL_ENABLE: "true"
-  # 添加默认的Anykernel3配置
-  AK3_SOURCE: "https://github.com/osm0sis/AnyKernel3"
-  AK3_BRANCH: "master"
-  GENERATE_DTB: "true"  # 添加DTB生成标志
+  PYTHON_VERSION: "3" # Only 2(Ubuntu 22.04) or 3(Any OS Versions).
+  PACK_METHOD: "Anykernel3" # Anykernel3 need SOURCE and BRANCH, MKBOOTIMG needn't it.
+  KERNELSU_METHOD: "shell" # shell, manual and only.
+  PATCHES_SOURCE: "JackA1ltman/NonGKI_Kernel_Patches" # [your_name]/[your_patch] -> gooder123/NonGKI_Patcher
+  PATCHES_BRANCH: "mi_kernel" # [your_branch] -> main
+  HOOK_METHOD: "normal" # manual hook method,can choice vfs and normal.
+  PROFILE_NAME: "polaris_pe_a13.env" # your profile name.
+  KERNELSU_SUS_PATCH: "false" # if u need manual susfs patch to kernelsu.
+  KPM_ENABLE: "false" # Only use it for SukiSU-Ultra.
+  KPM_PATCH_SOURCE: "" # patch exec file source -> raw.githubusercontent.com/Test/Test/patch .
+  GENERATE_DTB: "false" # if u kernel need DTB , but cannot auto generate it. (Only Anykernel3).
+  GENERATE_CHIP: "qcom" # only supported for qcom and mediatek.
+  BUILD_DEBUGGER: "false" # Output build errors.
+  BUILD_OTHER_CONFIG: "false" # Merge config files.
 
 jobs:
   build:
@@ -23,10 +26,8 @@ jobs:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
-    
     steps:
       - uses: actions/checkout@v4
-      
       - name: Prepare Configuration
         run: |
           CONFIG_ENV=$(grep -w "CONFIG_ENV" Profiles/polaris_evox_a15.env | head -n 1 | cut -d "=" -f 2)
@@ -53,9 +54,7 @@ jobs:
               SUSFS_UPDATE
               BOOT_SOURCE
               ROM_TEXT
-              # 添加Anykernel3配置
-              AK3_SOURCE
-              AK3_BRANCH
+
           )
           ls -al ./
 
@@ -67,14 +66,6 @@ jobs:
               fi
           done
 
-          # 确保AK3配置有默认值
-          if [[ -z "$AK3_SOURCE" ]]; then
-            echo "AK3_SOURCE=https://github.com/osm0sis/AnyKernel3" >> $GITHUB_ENV
-          fi
-          if [[ -z "$AK3_BRANCH" ]]; then
-            echo "AK3_BRANCH=master" >> $GITHUB_ENV
-          fi
-          
           # Move patch folder to tmp
           mv $GITHUB_WORKSPACE/Patches /tmp/
 
@@ -204,14 +195,16 @@ jobs:
           SUSFS_BRANCH=kernel-${{ env.KERNEL_VERSION }}
           KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
 
-          # Set Anykernel3 and KSU
+          # Set MKBOOTIMG and KSU
           cd $GITHUB_WORKSPACE
-          
+          git clone https://android.googlesource.com/platform/system/tools/mkbootimg mkboottools -b master-kernel-build-2022 --depth=1
+          wget ${{ env.BOOT_SOURCE }} -O $GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img
+
           cd $GITHUB_WORKSPACE/device_kernel
           curl -sSL ${{ env.KERNELSU_SOURCE }} | bash -s ${{ env.KERNELSU_BRANCH }}
           KSU_VERSION=$(cd ${{ env.KERNELSU_NAME }} && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
           echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
-          echo "PACK_METHOD=Anykernel3" >> $GITHUB_ENV
+          echo "PACK_METHOD=MKBOOTIMG" >> $GITHUB_ENV
 
           # Patch Cgroup V2
           wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/cgroupv2_to_49.patch
@@ -353,7 +346,7 @@ jobs:
           echo "# CONFIG_MEMCG_SWAP_ENABLED is not set" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_ANDROID_SIMPLE_LMK=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_ANDROID_SIMPLE_LMK_AGGRESSION=1" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_ANDROID_SIMPLE_LMK_MINFREE=100" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          echo "CONFIG_ANDROID_SIMPLE_LMK_MINFREE=100" >> ./arch/arm64/configs/$
 
           # Zram Writeback
           echo "CONFIG_ZRAM_WRITEBACK=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
@@ -507,102 +500,25 @@ jobs:
               ;;
           esac
 
-      - name: Make Anykernel3 Flasher
-        if: env.PACK_METHOD == 'Anykernel3'  
+      - name: Make Latest Boot Image
         run: |
-          # 确保AK3变量存在
-          if [[ -z "${{ env.AK3_SOURCE }}" ]]; then
-            echo "AK3_SOURCE=https://github.com/osm0sis/AnyKernel3" >> $GITHUB_ENV
-          fi
-          if [[ -z "${{ env.AK3_BRANCH }}" ]]; then
-            echo "AK3_BRANCH=master" >> $GITHUB_ENV
-          fi
-          
-          if [[ ! -d "$GITHUB_WORKSPACE/Anykernel3" ]]; then
-            echo "Cloning Anykernel3 from ${{ env.AK3_SOURCE }} branch ${{ env.AK3_BRANCH }}"
-            git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" "$GITHUB_WORKSPACE/Anykernel3" --depth=1
-          fi
-        
           IMAGE_DIR="$GITHUB_WORKSPACE/device_kernel/out/arch/arm64/boot"
           TIME=$(date +"%Y%m%d%H%M%S")
-        
-          cd $GITHUB_WORKSPACE/device_kernel/
-          mkdir -p tmp
-        
-          if [[ "${{ env.AK3_SOURCE }}" == *"osm0sis"* ]]; then
-            sed -i 's/do.devicecheck=1/do.devicecheck=0/g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
-            sed -i 's!BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!BLOCK=auto;!g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
-            sed -i 's/IS_SLOT_DEVICE=0;/is_slot_device=auto;/g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
-            echo "Now using official Anykernel3."
-          else
-            echo "Now using custom Anykernel3."
-          fi
-        
-          if [[ ! -d "$IMAGE_DIR" ]]; then
-            echo "::error::Image directory not found: $IMAGE_DIR"
-            exit 1
-          fi
-        
-          if [[ -f "$IMAGE_DIR/Image.gz-dtb" ]]; then
-            cp -fp "$IMAGE_DIR/Image.gz-dtb" tmp/
-            echo "Found Image.gz-dtb !"
-          elif [[ -f "$IMAGE_DIR/Image.gz" ]]; then
-            cp -fp "$IMAGE_DIR/Image.gz" tmp/
-            echo "Found Image.gz !"
-          elif [[ -f "$IMAGE_DIR/Image" ]]; then
-            gzip -c "$IMAGE_DIR/Image" > "$IMAGE_DIR/Image.gz"
-            cp -fp "$IMAGE_DIR/Image.gz" tmp/
-            echo "Compressed Image to Image.gz"
-          else
-            echo "::error::No kernel image found in $IMAGE_DIR"
-            exit 1
-          fi
-        
-          if [[ -f "$IMAGE_DIR/dtbo.img" ]]; then
-            cp -fp "$IMAGE_DIR/dtbo.img" tmp/
-            echo "Found dtbo.img !"
-          else
-            echo "dtbo.img not found, skipping"
-          fi
-        
-          if [[ -f "$IMAGE_DIR/dtb" ]]; then
-            echo "Found DTB!"
-            cp -fp "$IMAGE_DIR/dtb" tmp/
-          elif [[ "${{ env.GENERATE_DTB }}" == "true" ]]; then
-            if [[ -d "$IMAGE_DIR/dts/${{ env.GENERATE_CHIP }}" ]]; then
-              cat "$IMAGE_DIR"/dts/"${{ env.GENERATE_CHIP }}"/*.dtb > "$IMAGE_DIR/DTB"
-              cp -fp "$IMAGE_DIR/DTB" tmp/
-              echo "Generated ${{ env.GENERATE_CHIP }} DTB."
-            elif [[ -d "$IMAGE_DIR/dts/vendor/${{ env.GENERATE_CHIP }}" ]]; then
-              cat "$IMAGE_DIR"/dts/vendor/"${{ env.GENERATE_CHIP }}"/*.dtb > "$IMAGE_DIR/DTB"
-              cp -fp "$IMAGE_DIR/DTB" tmp/
-              echo "Generated ${{ env.GENERATE_CHIP }} DTB."
-            else
-              echo "::warning::Missing .dtb files for ${{ env.GENERATE_CHIP }}, continuing without DTB"
-            fi
-          else
-            echo "DTB not required, skipping"
-          fi
-        
-          if [[ $(ls -A "$GITHUB_WORKSPACE/Anykernel3" 2>/dev/null | wc -l) -eq 0 ]]; then
-            echo "::error::Anykernel3 directory is empty!"
-            exit 1
-          fi
-        
-          cp -rp "$GITHUB_WORKSPACE/Anykernel3"/* tmp/
-        
-          cd tmp
-          7za a -mx9 -mmt$(nproc) tmp.zip * > /dev/null
-          cd ..
-        
-          ZIP_NAME="${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-$TIME-${{ env.PACK_METHOD }}.zip"
-          cp -fp tmp/tmp.zip "$ZIP_NAME"
-          rm -rf tmp
-        
-          echo "PACK_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+          cd $GITHUB_WORKSPACE
+
+          FORMAT_MKBOOTING=$(echo `mkboottools/unpack_bootimg.py --boot_img=boot_source_${{ env.DEVICE_NAME }}.img --format mkbootimg`)
+          mkboottools/unpack_bootimg.py --boot_img boot_source_${{ env.DEVICE_NAME }}.img
+          rm -f out/kernel
+          cp $IMAGE_DIR/Image.gz-dtb out/kernel
+          eval "mkboottools/mkbootimg.py $FORMAT_MKBOOTING -o ${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-$TIME-image.img"
+
+          rm -f $GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img
+          echo "PACK_NAME=${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-$TIME-image.img" >> $GITHUB_ENV
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Kernel-${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-image
-          path: ${{ env.PACK_NAME }}
+          path: |
+            ${{ env.PACK_NAME }}
