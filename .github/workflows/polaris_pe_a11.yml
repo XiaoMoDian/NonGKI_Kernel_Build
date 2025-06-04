@@ -196,7 +196,6 @@ jobs:
           KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
 
           # Set Anykernel3 and KSU
-          # Set Anykernel3 and KSU
           cd $GITHUB_WORKSPACE
           
           cd $GITHUB_WORKSPACE/device_kernel
