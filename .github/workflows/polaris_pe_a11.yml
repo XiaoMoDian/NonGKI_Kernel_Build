@@ -196,6 +196,7 @@ jobs:
           KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
 
           # Set Anykernel3 and KSU
+          # Set Anykernel3 and KSU
           cd $GITHUB_WORKSPACE
           
           cd $GITHUB_WORKSPACE/device_kernel
@@ -203,7 +204,7 @@ jobs:
           KSU_VERSION=$(cd ${{ env.KERNELSU_NAME }} && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
           echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
           echo "PACK_METHOD=Anykernel3" >> $GITHUB_ENV
-
+          
           # Patch Cgroup V2
           wget https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Patches/refs/heads/mi_kernel/mix2s_evox_a15/cgroupv2_to_49.patch
           patch -p1 < cgroupv2_to_49.patch
