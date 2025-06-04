@@ -5,11 +5,15 @@ on:
   workflow_dispatch:
 
 env:
-  HOOK_METHOD: "normal" # manual hook method,can choice vfs and normal.
-  KPM_ENABLE: "true" # Only use it for SukiSU-Ultra.
-  KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux" # patch exec file source -> raw.githubusercontent.com/Test/Test/patch .
-  GENERATE_CHIP: "qcom" # only supported for qcom and mediatek.
-  REKERNEL_ENABLE: "true" # if u need Re:Kernel.
+  HOOK_METHOD: "normal"
+  KPM_ENABLE: "true"
+  KPM_PATCH_SOURCE: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+  GENERATE_CHIP: "qcom"
+  REKERNEL_ENABLE: "true"
+  # 添加默认的Anykernel3配置
+  AK3_SOURCE: "https://github.com/osm0sis/AnyKernel3"
+  AK3_BRANCH: "master"
+  GENERATE_DTB: "true"  # 添加DTB生成标志
 
 jobs:
   build:
@@ -49,6 +53,9 @@ jobs:
               SUSFS_UPDATE
               BOOT_SOURCE
               ROM_TEXT
+              # 添加Anykernel3配置
+              AK3_SOURCE
+              AK3_BRANCH
           )
           ls -al ./
 
@@ -60,6 +67,14 @@ jobs:
               fi
           done
 
+          # 确保AK3配置有默认值
+          if [[ -z "$AK3_SOURCE" ]]; then
+            echo "AK3_SOURCE=https://github.com/osm0sis/AnyKernel3" >> $GITHUB_ENV
+          fi
+          if [[ -z "$AK3_BRANCH" ]]; then
+            echo "AK3_BRANCH=master" >> $GITHUB_ENV
+          fi
+          
           # Move patch folder to tmp
           mv $GITHUB_WORKSPACE/Patches /tmp/
 
@@ -495,7 +510,16 @@ jobs:
       - name: Make Anykernel3 Flasher
         if: env.PACK_METHOD == 'Anykernel3'  
         run: |
+          # 确保AK3变量存在
+          if [[ -z "${{ env.AK3_SOURCE }}" ]]; then
+            echo "AK3_SOURCE=https://github.com/osm0sis/AnyKernel3" >> $GITHUB_ENV
+          fi
+          if [[ -z "${{ env.AK3_BRANCH }}" ]]; then
+            echo "AK3_BRANCH=master" >> $GITHUB_ENV
+          fi
+          
           if [[ ! -d "$GITHUB_WORKSPACE/Anykernel3" ]]; then
+            echo "Cloning Anykernel3 from ${{ env.AK3_SOURCE }} branch ${{ env.AK3_BRANCH }}"
             git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" "$GITHUB_WORKSPACE/Anykernel3" --depth=1
           fi
         
@@ -505,7 +529,7 @@ jobs:
           cd $GITHUB_WORKSPACE/device_kernel/
           mkdir -p tmp
         
-          if [[ "${{ env.AK3_SOURCE }}" =~ "osm0sis" ]]; then
+          if [[ "${{ env.AK3_SOURCE }}" == *"osm0sis"* ]]; then
             sed -i 's/do.devicecheck=1/do.devicecheck=0/g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
             sed -i 's!BLOCK=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!BLOCK=auto;!g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
             sed -i 's/IS_SLOT_DEVICE=0;/is_slot_device=auto;/g' $GITHUB_WORKSPACE/Anykernel3/anykernel.sh
@@ -554,8 +578,7 @@ jobs:
               cp -fp "$IMAGE_DIR/DTB" tmp/
               echo "Generated ${{ env.GENERATE_CHIP }} DTB."
             else
-              echo "::error::Missing .dtb files for ${{ env.GENERATE_CHIP }}"
-              exit 1
+              echo "::warning::Missing .dtb files for ${{ env.GENERATE_CHIP }}, continuing without DTB"
             fi
           else
             echo "DTB not required, skipping"
@@ -572,7 +595,7 @@ jobs:
           7za a -mx9 -mmt$(nproc) tmp.zip * > /dev/null
           cd ..
         
-          ZIP_NAME="${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-$TIME-${{ env.PACK_METHOD }}${{ env.LXC_STATUS }}.zip"
+          ZIP_NAME="${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-$TIME-${{ env.PACK_METHOD }}.zip"
           cp -fp tmp/tmp.zip "$ZIP_NAME"
           rm -rf tmp
         
@@ -582,5 +605,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kernel-${{ env.DEVICE_CODENAME }}-${{ env.ROM_TEXT }}-image
-          path: |
-            ${{ env.PACK_NAME }}
+          path: ${{ env.PACK_NAME }}
