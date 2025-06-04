@@ -508,13 +508,47 @@ jobs:
           key: build-kernel-${{ env.DEVICE_NAME }}${{ env.UPLOADNAME }}
           max-size: 2G
 
+      - name: Setup Build Environment
+        run: |
+    
+         export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
+         export LD_LIBRARY_PATH=$GITHUB_WORKSPACE/clang-custom/lib:$LD_LIBRARY_PATH
+         export CLANG_TRIPLE=aarch64-linux-gnu-
+         export ARCH=arm64
+         export SUBARCH=arm64
+         export CC="ccache clang"
+         export LD=ld.lld  # 明确指定 LLD 链接器
+         export KERNEL_DIR=$GITHUB_WORKSPACE/device_kernel
+         echo "CLANG_VERSION=$(clang --version | head -n1)" >> $GITHUB_ENV
+
       - name: Build Kernel
         run: |
-          export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
-          cd $GITHUB_WORKSPACE/device_kernel/
-          make CC="ccache clang" O=out ARCH=arm64 ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} ${{ env.DEFCONFIG_NAME }}
-          make -j$(nproc --all) CC="ccache clang" O=out ARCH=arm64 ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.GCC_32 }} CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-
+          cd $KERNEL_DIR
+    
+     
+          make O=out clean && rm -rf out
+    
+    
+          make O=out ARCH=$ARCH \
+           CLANG_TRIPLE=$CLANG_TRIPLE \
+           CC="$CC" LD=$LD \
+          ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} \
+          ${{ env.GCC_64 }} ${{ env.GCC_32 }} \
+          ${{ env.DEFCONFIG_NAME }}
+    
+    
+          ./scripts/config --file out/.config \
+          -e CONFIG_KSU \
+          -e CONFIG_SUSFS
+    
+  
+          make -j$(nproc --all) O=out ARCH=$ARCH \
+          CLANG_TRIPLE=$CLANG_TRIPLE \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+          CC="$CC" LD=$LD \
+          ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} \
+          ${{ env.GCC_64 }} ${{ env.GCC_32 }}
       - name: KPM Patcher (Experiment)
         if: env.KPM_ENABLE == 'true'
         run: |
