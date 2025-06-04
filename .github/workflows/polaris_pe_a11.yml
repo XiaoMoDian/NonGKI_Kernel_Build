@@ -188,8 +188,7 @@ jobs:
 
           # Set Anykernel3 and KSU
           cd $GITHUB_WORKSPACE
-          git clone 
-          wget ${{ env.BOOT_SOURCE }} -O $GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img
+          git clone ${{ env.AK3_SOURCE }} -b ${{ env.AK3_BRANCH }} Anykernel3 --depth=1
 
           cd $GITHUB_WORKSPACE/device_kernel
           curl -sSL ${{ env.KERNELSU_SOURCE }} | bash -s ${{ env.KERNELSU_BRANCH }}
