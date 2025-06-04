@@ -9,7 +9,7 @@ env:
   PATCHES_SOURCE: "JackA1ltman/NonGKI_Kernel_Patches" # [your_name]/[your_patch] -> gooder123/NonGKI_Patcher
   PATCHES_BRANCH: "mi_kernel" # [your_branch] -> main
   HOOK_METHOD: "normal" # manual hook method,can choice vfs and normal.
-  PROFILE_NAME: "polaris_pe_a13.env" # your profile name.
+  PROFILE_NAME: "polaris_pe_a11.env" # your profile name.
   KERNELSU_SUS_PATCH: "false" # if u need manual susfs patch to kernelsu.
   KPM_ENABLE: "false" # Only use it for SukiSU-Ultra.
   KPM_PATCH_SOURCE: "" # patch exec file source -> raw.githubusercontent.com/Test/Test/patch .
@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Prepare Configuration
         run: |
-          CONFIG_ENV=$(grep -w "CONFIG_ENV" Profiles/polaris_evox_a15.env | head -n 1 | cut -d "=" -f 2)
+          CONFIG_ENV=$(grep -w "CONFIG_ENV" Profiles/polaris_pe_a11.env | head -n 1 | cut -d "=" -f 2)
           CONFIG_LIST=(
               DEVICE_NAME
               DEVICE_CODENAME
