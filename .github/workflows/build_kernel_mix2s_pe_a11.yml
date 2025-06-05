@@ -554,7 +554,7 @@ jobs:
           fi
 
       - name: Fixed Kernel Patch
-                if: env.SUSFS_ENABLE == 'true' && env.SUSFS_FIXED == 'true'
+        if: env.SUSFS_ENABLE == 'true' && env.SUSFS_FIXED == 'true'
         run: |
           cd $GITHUB_WORKSPACE/device_kernel/
           cp NonGKI_Kernel_Patches/mix2s_evox_a15/cmdline_fixed.patch ./
