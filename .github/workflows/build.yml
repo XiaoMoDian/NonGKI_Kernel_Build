@@ -109,7 +109,7 @@ jobs:
 
         | Device Name | Codename | Kernel | System | Android | Method | KernelSU | SuSFS | Re:Kernel | Syscall |
         |----------|----------|----------|----------|----------|----------|----------|----------|----------|----------|
-        | OnePlus 8  | instantnoodle | 4.19 | OxygenOS/ColorOS 13.1 | 13 | AnyKernel3 | Magic | ✅ | ❌ | ❌ |
+        | OnePlus 8  | instantnoodle | 4.19 | OxygenOS/ColorOS 13.1 | 13 | AnyKernel3 | Magic | ✅ | ❌ | ✅ |
         | OnePlus 8  | instantnoodle | 4.19 | Nameless 15 | 15 | AnyKernel3 | rsuntk | ✅ | ❌ | ❌ |
         | Xiaomi MIX2S  | polaris | 4.9 | Evolution X 10.6 | 15 | Boot Image | SukiSU(U) | ✅ | ✅ | ❌ |
         | Redmi K20 Pro  | raphael | 4.14 | Based-AOSP | 15 | AnyKernel3 | rsuntk | ✅ | ❌ | ✅ |
@@ -148,7 +148,7 @@ jobs:
           fi
 
           NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
-          # NEW_TAG="v1.4-r1"
+          # NEW_TAG="v1.5-r1"
 
           # Output the new tag to be used
           echo "New tag: $NEW_TAG"
