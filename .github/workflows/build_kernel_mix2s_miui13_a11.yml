@@ -573,10 +573,14 @@ jobs:
         if: env.SUSFS_ENABLE == 'true' && env.SUSFS_FIXED == 'true'
         run: |
           cd $GITHUB_WORKSPACE/device_kernel/
-          cp NonGKI_Kernel_Patches/[patch_folder]/[patch_file].patch ./
+          cp NonGKI_Kernel_Patches/mix2s_evox_a15/cmdline_fixed.patch ./
+          cp NonGKI_Kernel_Patches/mix2s_evox_a15/task_mmu_fixed.patch ./
+          cp NonGKI_Kernel_Patches/mix2s_evox_a15/fdinfo_fixed.patch ./
 
-          patch -p1 < [patch_file].patch || true
-
+          patch -p1 < cmdline_fixed.patch || true
+          patch -p1 < task_mmu_fixed.patch || true
+          patch -p1 < fdinfo_fixed.patch || true
+          
       - name: Updated SUSFS Version
         if: env.SUSFS_ENABLE == 'true' && env.SUSFS_UPDATE == 'true'
         run: |
